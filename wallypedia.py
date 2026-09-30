@@ -16,6 +16,8 @@ never leave your machine; only this engine is meant to be shared.
 Usage:
     python3 wallypedia.py build --notes ~/memory --out site/
     python3 wallypedia.py build --config wallypedia.json
+    python3 wallypedia.py serve --notes ~/memory --port 8080
+        # browse the wiki AND upload new .md notes through the browser
 
 Stdlib only. No dependencies.
 """
@@ -412,6 +414,233 @@ def build(notes_dir, out_dir, config):
     return len(notes)
 
 
+# ----------------------------------------------------------------------------
+# Serve mode: browse the wiki and upload notes through the browser
+#
+#   python3 wallypedia.py serve --notes ~/memory --port 8080
+#
+# Builds the site into a staging directory, serves it, and exposes /upload:
+# a small page where you can drop .md files. Each upload lands in the notes
+# directory (sanitized filename, deduped) and the wiki rebuilds immediately.
+# ----------------------------------------------------------------------------
+
+UPLOAD_EXTS = {".md", ".markdown", ".txt"}
+UPLOAD_MAX_BYTES = 5 * 1024 * 1024
+
+UPLOAD_STYLE = """
+<style>
+#drop{border:2px dashed #888;border-radius:8px;padding:2em;text-align:center;
+color:#888;margin:1em 0}
+#drop.over{border-color:#2a7ae2;color:#2a7ae2;background:#f0f6ff}
+#up button{font-size:1em;padding:.4em 1.2em;margin-top:.6em}
+#log{color:#2a7ae2}
+</style>"""
+
+UPLOAD_JS = """
+<script>
+var dz = document.getElementById('drop');
+var fi = document.getElementById('files');
+['dragenter','dragover'].forEach(function(e){
+  dz.addEventListener(e, function(ev){ ev.preventDefault(); dz.classList.add('over'); });
+});
+dz.addEventListener('dragleave', function(ev){ ev.preventDefault(); dz.classList.remove('over'); });
+dz.addEventListener('drop', function(ev){
+  ev.preventDefault(); dz.classList.remove('over');
+  fi.files = ev.dataTransfer.files;
+  showNames();
+});
+function showNames(){
+  var ul = document.getElementById('log'); ul.innerHTML = '';
+  for (var i = 0; i < fi.files.length; i++){
+    var li = document.createElement('li'); li.textContent = fi.files[i].name; ul.appendChild(li);
+  }
+}
+fi.addEventListener('change', showNames);
+</script>"""
+
+UPLOAD_BODY = (
+    UPLOAD_STYLE
+    + "<h2>Upload notes</h2>"
+    + "<p>Drop <code>.md</code> files below (or pick them) and they land in your "
+    + "notes folder; the wiki rebuilds itself right away.</p>"
+    + '<form id="up" action="/upload" method="post" enctype="multipart/form-data">'
+    + '<input id="files" type="file" name="files" multiple accept=".md,.markdown,.txt">'
+    + "<br><button type=\"submit\">Upload</button></form>"
+    + '<div id="drop">drop files here</div><ul id="log"></ul>'
+    + '<p><a href="/">&larr; back to the wiki</a></p>'
+    + UPLOAD_JS
+)
+
+
+def safe_upload_name(name):
+    """Sanitize an uploaded filename; return None if it isn't an uploadable note."""
+    name = os.path.basename((name or "").strip())
+    name = re.sub(r"[^A-Za-z0-9._\- ]", "_", name).strip(" .")
+    root, ext = os.path.splitext(name)
+    if not root or ext.lower() not in UPLOAD_EXTS:
+        return None
+    return root + ext.lower()
+
+
+def unique_path(notes_dir, name):
+    path = os.path.join(notes_dir, name)
+    if not os.path.exists(path):
+        return path
+    root, ext = os.path.splitext(name)
+    i = 2
+    while True:
+        cand = os.path.join(notes_dir, "%s-%d%s" % (root, i, ext))
+        if not os.path.exists(cand):
+            return cand
+        i += 1
+
+
+def parse_multipart(rfile, content_type, content_length, max_total):
+    """Minimal multipart/form-data parser for the upload form.
+
+    Returns a list of (filename, data) for file parts named "files".
+    No cgi module (deprecated in 3.11+, gone in 3.13) — stdlib only.
+    """
+    m = re.search(r'boundary=([^;]+)', content_type or "")
+    if not m:
+        return []
+    boundary = m.group(1).strip().strip('"').encode("ascii", "ignore")
+    if not boundary or len(boundary) > 200:
+        return []
+    body = rfile.read(content_length)
+    if len(body) > max_total:
+        raise ValueError("upload too large")
+    parts = []
+    for chunk in body.split(b"--" + boundary):
+        if chunk.startswith(b"\r\n"):
+            chunk = chunk[2:]
+        if chunk.endswith(b"--"):
+            chunk = chunk[:-2]
+        if chunk.endswith(b"\r\n"):
+            chunk = chunk[:-2]
+        if not chunk:
+            continue
+        head, sep, data = chunk.partition(b"\r\n\r\n")
+        if not sep:
+            continue
+        headers = head.decode("latin-1", "replace")
+        name_m = re.search(r'name="([^"]*)"', headers)
+        if not name_m or name_m.group(1) != "files":
+            continue
+        fn_m = re.search(r'filename="([^"]*)"', headers)
+        if not fn_m or not fn_m.group(1):
+            continue
+        parts.append((fn_m.group(1), data))
+    return parts
+
+
+def make_handler(notes_dir, staging_dir, cfg):
+    from http.server import SimpleHTTPRequestHandler
+
+    site = {"title": cfg["title"], "subtitle": cfg["subtitle"]}
+
+    def rebuild():
+        return build(notes_dir, staging_dir, cfg)
+
+    class WikiHandler(SimpleHTTPRequestHandler):
+        server_version = "Wallypedia/0.2"
+
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, directory=staging_dir, **kwargs)
+
+        def log_message(self, fmt, *args):  # quieter logs
+            sys.stderr.write("wallypedia: %s\n" % (fmt % args))
+
+        def _send_html(self, body, code=200):
+            data = body.encode("utf-8")
+            self.send_response(code)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+
+        def do_GET(self):
+            if self.path == "/upload" or self.path.startswith("/upload?"):
+                self._send_html(page(site, "Upload notes", UPLOAD_BODY))
+            else:
+                super().do_GET()
+
+        def do_POST(self):
+            if self.path != "/upload":
+                self.send_error(404)
+                return
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+            except ValueError:
+                length = 0
+            if length <= 0 or length > 64 * 1024 * 1024:
+                self.send_error(400, "bad upload size")
+                return
+            try:
+                parts = parse_multipart(self.rfile, self.headers.get("Content-Type"),
+                                        length, 64 * 1024 * 1024)
+            except ValueError:
+                self.send_error(413, "upload too large")
+                return
+            except Exception:
+                self.send_error(400, "could not parse upload")
+                return
+            saved, skipped = [], []
+            for filename, data in parts:
+                name = safe_upload_name(filename)
+                if name is None:
+                    skipped.append(filename)
+                    continue
+                if len(data) > UPLOAD_MAX_BYTES:
+                    skipped.append(filename)
+                    continue
+                target = unique_path(notes_dir, name)
+                try:
+                    with open(target, "wb") as f:
+                        f.write(data)
+                    saved.append(os.path.basename(target))
+                except OSError:
+                    skipped.append(filename)
+            count = rebuild()
+            msg = "saved %d file(s)" % len(saved)
+            if saved:
+                msg += ": " + ", ".join(saved)
+            if skipped:
+                msg += " — skipped %d (not .md/.txt or too large)" % len(skipped)
+            sys.stderr.write("wallypedia: upload: %s; rebuilt %d notes\n" % (msg, count))
+            self.send_response(303)
+            self.send_header("Location", "/")
+            self.end_headers()
+
+    return WikiHandler
+
+
+def cmd_serve(args):
+    from http.server import ThreadingHTTPServer
+    import tempfile
+
+    cfg = load_config(args.config, {"notes_dir": args.notes, "title": args.title})
+    if args.exclude:
+        cfg["exclude"] = list(cfg["exclude"]) + args.exclude
+    notes_dir = os.path.expanduser(cfg["notes_dir"])
+    os.makedirs(notes_dir, exist_ok=True)
+    if not os.access(notes_dir, os.W_OK):
+        print("wallypedia: notes dir %s is not writable — uploads will fail" % notes_dir,
+              file=sys.stderr)
+    staging = tempfile.mkdtemp(prefix="wallypedia-serve-")
+    count = build(notes_dir, staging, cfg)
+    handler = make_handler(notes_dir, staging, cfg)
+    httpd = ThreadingHTTPServer((args.host, args.port), handler)
+    httpd.daemon_threads = True
+    print("wallypedia: serving %d notes at http://%s:%d/  (upload at /upload)"
+          % (count, args.host if args.host != "0.0.0.0" else "localhost", args.port))
+    print("wallypedia: notes dir: %s" % notes_dir)
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass
+
+
 def load_config(path, overrides):
     cfg = dict(DEFAULT_CONFIG)
     if path:
@@ -432,7 +661,18 @@ def main(argv=None):
     b.add_argument("--config", help="JSON config file")
     b.add_argument("--title", help="wiki title")
     b.add_argument("--exclude", action="append", help="extra fnmatch exclusion (repeatable)")
+    s = sub.add_parser("serve", help="serve the wiki in a browser, with note upload")
+    s.add_argument("--notes", help="directory of markdown notes")
+    s.add_argument("--config", help="JSON config file")
+    s.add_argument("--title", help="wiki title")
+    s.add_argument("--exclude", action="append", help="extra fnmatch exclusion (repeatable)")
+    s.add_argument("--host", default="0.0.0.0", help="bind host (default 0.0.0.0)")
+    s.add_argument("--port", type=int, default=8080, help="port (default 8080)")
     args = ap.parse_args(argv)
+
+    if args.cmd == "serve":
+        cmd_serve(args)
+        return
 
     cfg = load_config(args.config, {"notes_dir": args.notes, "out_dir": args.out, "title": args.title})
     if args.exclude:

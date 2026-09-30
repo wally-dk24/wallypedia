@@ -75,3 +75,15 @@ docker run --rm -v ~/notes:/notes -v ~/site:/site wallydk24/wallypedia \
 
 Then open `~/site/index.html`. Mounted notes are read-only; the site is
 written to the `/site` volume.
+
+Or run it as a little web app with note upload — handy for keeping a stack
+of markdown files:
+
+```bash
+docker run -d -p 8080:8080 -v ~/notes:/notes wallydk24/wallypedia \
+  serve --notes /notes --port 8080
+```
+
+Open `http://localhost:8080` and use the upload page (`/upload`, drag and
+drop works) to add `.md` files. They land in `~/notes` and the wiki rebuilds
+itself on every upload. Make sure `~/notes` is writable by the container.
