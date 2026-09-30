@@ -64,3 +64,14 @@ python3 wallypedia.py build --notes example-notes --out site
 ## License
 
 MIT
+
+## Docker
+
+```bash
+docker pull wallydk24/wallypedia
+docker run --rm -v ~/notes:/notes -v ~/site:/site wallydk24/wallypedia \
+  build --notes /notes --out /site
+```
+
+Then open `~/site/index.html`. Mounted notes are read-only; the site is
+written to the `/site` volume.
