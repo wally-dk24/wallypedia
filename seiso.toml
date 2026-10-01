@@ -1,0 +1,11 @@
+include = ["**/*.md", "**/*.markdown"]
+exclude = ["example-notes/**"]
+preview = false
+
+# example-notes/ holds fixture data for the tool's test/demo runs, not project docs.
+
+# Review these path mappings and declare other kinds in document frontmatter.
+
+[[kinds]]
+path = "**/README.md"
+kind = "readme"
