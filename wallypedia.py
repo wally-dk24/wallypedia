@@ -605,6 +605,14 @@ def make_handler(notes_dir, staging_dir, cfg):
             self.wfile.write(data)
 
         def do_GET(self):
+            if self.path == "/healthz":
+                data = b"ok"
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+                return
             if self.path == "/upload" or self.path.startswith("/upload?"):
                 from brand.page import render as brand_render
                 self._send_html(brand_render(
