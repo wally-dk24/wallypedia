@@ -17,6 +17,7 @@ FROM python:3.12-alpine
 
 WORKDIR /app
 COPY wallypedia.py ./
+COPY brand/ ./brand/
 USER 1000
 
 EXPOSE 8080

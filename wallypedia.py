@@ -268,21 +268,28 @@ def collect_notes(notes_dir, exclude):
 # Site build
 # ----------------------------------------------------------------------------
 
-CSS = """body{font-family:Georgia,serif;max-width:760px;margin:0 auto;padding:2rem 1.2rem;color:#222;background:#fdfcf9;line-height:1.65}
-a{color:#1a5fb4}a.wl-missing{color:#a33;border-bottom:1px dotted #a33;cursor:help}
-a.tag{background:#eef3fb;border-radius:4px;padding:0 .4em;text-decoration:none;font-size:.9em}
-pre{background:#f4f1ea;padding:1rem;overflow-x:auto;border-radius:6px}
-code{background:#f4f1ea;padding:.1em .3em;border-radius:4px}pre code{background:none;padding:0}
-blockquote{border-left:3px solid #c9b458;margin:1em 0;padding:.2em 1em;color:#555;background:#fbf8ef}
-header.site{border-bottom:2px solid #222;margin-bottom:1.5rem;padding-bottom:.5rem}
-header.site h1{margin:0;font-size:1.6rem}header.site p{margin:.2em 0 0;color:#666;font-style:italic}
-nav.top{margin:.6em 0;font-size:.95em}nav.top a{margin-right:1em}
-.backlinks{margin-top:2.5rem;border-top:1px solid #ccc;padding-top:1rem;font-size:.95em}
-footer{margin-top:3rem;border-top:1px solid #ddd;padding-top:.8rem;color:#888;font-size:.85em}
-#search{width:100%;font-size:1.05rem;padding:.5em;border:1px solid #bbb;border-radius:6px}
-#results{list-style:none;padding:0}#results li{margin:.6em 0}#results .t{font-weight:bold}
-.cloud a{margin:.15em;display:inline-block;text-decoration:none}
-table.idx{width:100%;border-collapse:collapse}table.idx td{padding:.35em .5em;border-bottom:1px solid #eee}
+CSS = """/* wallypedia wiki styles — brand-flavored. Page chrome (header/footer,
+   buttons, forms) comes from /brand.css (wally-brand). */
+.wiki{font-family:Georgia,serif;line-height:1.68;font-size:17px}
+.wiki a{color:#f7c873}
+.wiki a.wl-missing{color:#e0705c;border-bottom:1px dotted #e0705c;cursor:help}
+.wiki a.tag{background:#2e2620;border:1px solid #453a2c;border-radius:999px;padding:.05em .6em;text-decoration:none;font-size:.85em;color:#f7c873}
+.wiki pre{background:#0f0c0a;padding:1rem;overflow-x:auto;border-radius:8px;border:1px solid #332b21;font-size:.85em}
+.wiki code{background:#2e2620;padding:.1em .35em;border-radius:4px;font-size:.88em}
+.wiki pre code{background:none;padding:0}
+.wiki blockquote{border-left:3px solid #f0a832;margin:1em 0;padding:.2em 1em;color:#a49176;background:#1f1a15}
+.wiki h1,.wiki h2,.wiki h3{font-family:-apple-system,"Segoe UI",Inter,Roboto,sans-serif;letter-spacing:-.01em}
+.wiki table.idx{width:100%;border-collapse:collapse}
+.wiki table.idx td{padding:.4em .5em;border-bottom:1px solid #332b21}
+.wiki .backlinks{margin-top:2.5rem;border-top:1px solid #332b21;padding-top:1rem;font-size:.95em}
+nav.top{margin-top:.4em}
+nav.top a{display:inline-block;font-size:13px;color:#a49176;border:1px solid #453a2c;padding:6px 13px;border-radius:999px;margin:0 8px 8px 0;text-decoration:none;font-family:-apple-system,"Segoe UI",Inter,Roboto,sans-serif}
+nav.top a:hover{color:#f3e9d7;border-color:#f0a832;text-decoration:none}
+#search{width:100%;font-size:1.05rem;padding:.6em .8em;background:#1f1a15;border:1px solid #453a2c;border-radius:8px;color:#f3e9d7;font-family:-apple-system,"Segoe UI",Inter,Roboto,sans-serif}
+#search:focus{outline:none;border-color:#f0a832;box-shadow:0 0 0 3px rgba(240,168,50,.18)}
+#results{list-style:none;padding:0}#results li{margin:.7em 0}
+#results .t{font-weight:bold;color:#f7c873}#results small{color:#a49176}
+.cloud a{margin:.2em;display:inline-block;text-decoration:none;color:#f7c873}
 """
 
 SEARCH_JS = """const box=document.getElementById('search'),res=document.getElementById('results');
@@ -307,23 +314,50 @@ box.addEventListener('input',()=>{
 });
 """
 
+_COMPASS_SVG = None
+
+
+def _compass_svg():
+    """Inline the wally-brand compass mark into the wiki header."""
+    global _COMPASS_SVG
+    if _COMPASS_SVG is None:
+        here = os.path.dirname(os.path.abspath(__file__))
+        try:
+            with open(os.path.join(here, "brand", "icons", "compass.svg")) as f:
+                _COMPASS_SVG = f.read()
+        except OSError:
+            _COMPASS_SVG = ""
+    return _COMPASS_SVG
+
+
 PAGE_TMPL = """<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{page_title} — {site_title}</title><link rel="stylesheet" href="style.css"></head>
-<body>
-<header class="site"><h1><a href="index.html" style="text-decoration:none;color:inherit">{site_title}</a></h1>
-<p>{subtitle}</p><nav class="top"><a href="index.html">Home</a><a href="tags.html">Tags</a><a href="archive.html">Archive</a><a href="search.html">Search</a></nav></header>
+<title>{page_title} — {site_title}</title>
+<link rel="stylesheet" href="brand.css"><link rel="stylesheet" href="style.css"></head>
+<body class="wb">
+<div class="wb-page">
+<header class="wb-header">
+<div class="wb-mark">{compass}</div>
+<div class="wb-title"><h1><a href="index.html" style="text-decoration:none;color:inherit"><span class="wb-tool">{site_title}</span></a></h1><p>{subtitle}</p></div>
+<div class="wb-spacer"></div>
+<nav class="top"><a href="index.html">Home</a><a href="tags.html">Tags</a><a href="archive.html">Archive</a><a href="search.html">Search</a>{nav_upload}</nav>
+</header>
+<main class="wiki">
 {body}
-<footer>Built with wallypedia · <a href="https://github.com/wally-dk24/wallypedia">source</a></footer>
+</main>
+<footer class="wb-footer">{compass}<span>Built by <strong>Wally</strong> · wallypedia</span><div class="wb-spacer"></div><span><a href="https://github.com/wally-dk24/wallypedia">source</a></span></footer>
+</div>
 </body></html>"""
 
 
-def page(site, title, body):
+def page(site, title, body, upload_link=False):
+    nav_upload = '<a href="/upload">Upload</a>' if upload_link else ""
     return PAGE_TMPL.format(page_title=html.escape(title), site_title=html.escape(site["title"]),
-                            subtitle=html.escape(site["subtitle"]), body=body)
+                            subtitle=html.escape(site["subtitle"]), body=body,
+                            compass=_compass_svg(), nav_upload=nav_upload)
 
 
-def build(notes_dir, out_dir, config):
+def build(notes_dir, out_dir, config, serve=False):
     notes = collect_notes(notes_dir, config["exclude"])
     ctx = WikiContext()
     slugs = {}
@@ -349,6 +383,13 @@ def build(notes_dir, out_dir, config):
     os.makedirs(out_dir, exist_ok=True)
     with open(os.path.join(out_dir, "style.css"), "w") as f:
         f.write(CSS)
+    # vendor the shared brand stylesheet next to the wiki (pages link it)
+    here = os.path.dirname(os.path.abspath(__file__))
+    brand_css = os.path.join(here, "brand", "brand.css")
+    if os.path.exists(brand_css):
+        with open(brand_css) as f:
+            with open(os.path.join(out_dir, "brand.css"), "w") as g:
+                g.write(f.read())
 
     site = {"title": config["title"], "subtitle": config["subtitle"]}
 
@@ -363,7 +404,7 @@ def build(notes_dir, out_dir, config):
         if n.tags:
             tagline = '<p>' + " ".join('<a class="tag" href="tag-%s.html">#%s</a>' % (t, t) for t in n.tags) + "</p>"
         with open(os.path.join(out_dir, n.slug + ".html"), "w") as f:
-            f.write(page(site, n.title, tagline + body))
+            f.write(page(site, n.title, tagline + body, upload_link=serve))
 
     # index: dated notes first (journal-style), then everything alphabetical
     dated = sorted([n for n in notes if n.date], key=lambda n: n.date, reverse=True)
@@ -376,13 +417,14 @@ def build(notes_dir, out_dir, config):
                   '<table class="idx">%s</table>' % (recent or "<li><em>no dated notes</em></li>",
                                                     len(notes), rows))
     with open(os.path.join(out_dir, "index.html"), "w") as f:
-        f.write(page(site, "Home", index_body))
+        f.write(page(site, "Home", index_body, upload_link=serve))
 
     # archive by date
     arch = "".join('<li><a href="%s.html">%s</a></li>' % (n.slug, html.escape(n.title)) for n in dated)
     with open(os.path.join(out_dir, "archive.html"), "w") as f:
         f.write(page(site, "Archive",
-                     "<h2>Dated notes</h2><ul>%s</ul>" % (arch or "<li><em>none</em></li>")))
+                     "<h2>Dated notes</h2><ul>%s</ul>" % (arch or "<li><em>none</em></li>"),
+                     upload_link=serve))
 
     # tags
     by_tag = {}
@@ -393,12 +435,12 @@ def build(notes_dir, out_dir, config):
         '<a class="tag" style="font-size:%d%%" href="tag-%s.html">#%s</a>'
         % (90 + min(len(v), 10) * 8, t, t) for t, v in sorted(by_tag.items()))
     with open(os.path.join(out_dir, "tags.html"), "w") as f:
-        f.write(page(site, "Tags", "<h2>Tags</h2><div class='cloud'>%s</div>" % (cloud or "<em>none</em>")))
+        f.write(page(site, "Tags", "<h2>Tags</h2><div class='cloud'>%s</div>" % (cloud or "<em>none</em>"), upload_link=serve))
     for t, v in by_tag.items():
         items = "".join('<li><a href="%s.html">%s</a></li>' % (n.slug, html.escape(n.title))
                         for n in sorted(v, key=lambda x: x.title.lower()))
         with open(os.path.join(out_dir, "tag-%s.html" % t), "w") as f:
-            f.write(page(site, "#%s" % t, "<h2>#%s</h2><ul>%s</ul>" % (t, items)))
+            f.write(page(site, "#%s" % t, "<h2>#%s</h2><ul>%s</ul>" % (t, items), upload_link=serve))
 
     # search
     index = [{"slug": n.slug, "title": n.title, "tags": n.tags,
@@ -409,7 +451,7 @@ def build(notes_dir, out_dir, config):
                    'placeholder="type to search your wiki…" autocomplete="off">'
                    '<ul id="results"></ul><script>%s</script>' % SEARCH_JS)
     with open(os.path.join(out_dir, "search.html"), "w") as f:
-        f.write(page(site, "Search", search_body))
+        f.write(page(site, "Search", search_body, upload_link=serve))
 
     return len(notes)
 
@@ -429,11 +471,11 @@ UPLOAD_MAX_BYTES = 5 * 1024 * 1024
 
 UPLOAD_STYLE = """
 <style>
-#drop{border:2px dashed #888;border-radius:8px;padding:2em;text-align:center;
-color:#888;margin:1em 0}
-#drop.over{border-color:#2a7ae2;color:#2a7ae2;background:#f0f6ff}
-#up button{font-size:1em;padding:.4em 1.2em;margin-top:.6em}
-#log{color:#2a7ae2}
+#drop{border:2px dashed #453a2c;border-radius:12px;padding:2.2em;text-align:center;
+color:#a49176;margin:1em 0;transition:border-color .15s,background .15s}
+#drop.over{border-color:#f0a832;color:#f7c873;background:rgba(240,168,50,.07)}
+#log{color:#7fc97f;list-style:none;padding:0}
+#log li{margin:.25em 0;font-size:.95em}
 </style>"""
 
 UPLOAD_JS = """
@@ -452,7 +494,7 @@ dz.addEventListener('drop', function(ev){
 function showNames(){
   var ul = document.getElementById('log'); ul.innerHTML = '';
   for (var i = 0; i < fi.files.length; i++){
-    var li = document.createElement('li'); li.textContent = fi.files[i].name; ul.appendChild(li);
+    var li = document.createElement('li'); li.textContent = '\u2713 ' + fi.files[i].name; ul.appendChild(li);
   }
 }
 fi.addEventListener('change', showNames);
@@ -460,14 +502,17 @@ fi.addEventListener('change', showNames);
 
 UPLOAD_BODY = (
     UPLOAD_STYLE
-    + "<h2>Upload notes</h2>"
-    + "<p>Drop <code>.md</code> files below (or pick them) and they land in your "
-    + "notes folder; the wiki rebuilds itself right away.</p>"
+    + '<div class="wb-card"><h2>Upload notes</h2>'
+    + '<p class="wb-sub">Drop <code>.md</code> files below (or pick them) — they land in your '
+    + "notes folder and the wiki rebuilds itself right away.</p>"
     + '<form id="up" action="/upload" method="post" enctype="multipart/form-data">'
+    + '<div class="wb-field"><label for="files">Files</label>'
     + '<input id="files" type="file" name="files" multiple accept=".md,.markdown,.txt">'
-    + "<br><button type=\"submit\">Upload</button></form>"
+    + "</div>"
     + '<div id="drop">drop files here</div><ul id="log"></ul>'
-    + '<p><a href="/">&larr; back to the wiki</a></p>'
+    + '<div class="wb-btn-row"><button class="wb-btn wb-btn-primary" type="submit">Upload</button>'
+    + '<a class="wb-btn" href="/">Back to the wiki</a></div>'
+    + "</form></div>"
     + UPLOAD_JS
 )
 
@@ -540,7 +585,7 @@ def make_handler(notes_dir, staging_dir, cfg):
     site = {"title": cfg["title"], "subtitle": cfg["subtitle"]}
 
     def rebuild():
-        return build(notes_dir, staging_dir, cfg)
+        return build(notes_dir, staging_dir, cfg, serve=True)
 
     class WikiHandler(SimpleHTTPRequestHandler):
         server_version = "Wallypedia/0.2"
@@ -561,7 +606,11 @@ def make_handler(notes_dir, staging_dir, cfg):
 
         def do_GET(self):
             if self.path == "/upload" or self.path.startswith("/upload?"):
-                self._send_html(page(site, "Upload notes", UPLOAD_BODY))
+                from brand.page import render as brand_render
+                self._send_html(brand_render(
+                    site["title"], site["subtitle"],
+                    "Upload notes", UPLOAD_BODY,
+                    footer_extra='<a href="/">back to the wiki</a>'))
             else:
                 super().do_GET()
 
@@ -628,7 +677,7 @@ def cmd_serve(args):
         print("wallypedia: notes dir %s is not writable — uploads will fail" % notes_dir,
               file=sys.stderr)
     staging = tempfile.mkdtemp(prefix="wallypedia-serve-")
-    count = build(notes_dir, staging, cfg)
+    count = build(notes_dir, staging, cfg, serve=True)
     handler = make_handler(notes_dir, staging, cfg)
     httpd = ThreadingHTTPServer((args.host, args.port), handler)
     httpd.daemon_threads = True
